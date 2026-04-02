@@ -4,10 +4,33 @@ set -euo pipefail
 
 LEGACY_CONFIG="/etc/SimpleSaferServer/config.conf"
 LEGACY_MSMTP="/etc/msmtprc"
-NEW_INSTALL_URL="https://sss.chrismin13.com/install.sh"
-NEW_INSTALL_FALLBACK_URL="https://raw.githubusercontent.com/chrismin13/SimpleSaferServer/main/install.sh"
+NEW_INSTALL_URL="https://raw.githubusercontent.com/chrismin13/SimpleSaferServer/main/install.sh"
 IMPORTER_PATH="/opt/SimpleSaferServer/scripts/import_legacy.py"
 IMPORTER_PYTHON="/opt/SimpleSaferServer/venv/bin/python"
+
+log() {
+  printf '%s\n' "$1"
+}
+
+warn() {
+  printf '%s\n' "$1" >&2
+}
+
+print_config_debug_help() {
+  warn "No changes were made. The migration stopped before copying files or installing anything."
+
+  if [ -d "/etc/SimpleSaferServer" ]; then
+    warn ""
+    warn "Contents of /etc/SimpleSaferServer/:"
+    ls -la /etc/SimpleSaferServer >&2 || true
+  fi
+
+  warn ""
+  warn "Searching common locations for a legacy config file..."
+  if ! grep -Rsl '^BACKUP_CLOUD_TIME=' /etc /root /home 2>/dev/null >&2; then
+    warn "No config file with BACKUP_CLOUD_TIME was found under /etc, /root, or /home."
+  fi
+}
 
 if [ "$EUID" -ne 0 ]; then
   printf "\nThis migration script must be run as root.\n"
@@ -16,7 +39,10 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 if [ ! -f "$LEGACY_CONFIG" ]; then
-  printf "\nLegacy config not found at %s\n\n" "$LEGACY_CONFIG"
+  warn ""
+  warn "Legacy config not found at $LEGACY_CONFIG"
+  print_config_debug_help
+  warn ""
   exit 1
 fi
 
@@ -32,7 +58,10 @@ for var_name in "${required_vars[@]}"; do
 done
 
 if [ ! -f "$LEGACY_MSMTP" ]; then
-  printf "\nLegacy SMTP config not found at %s\n\n" "$LEGACY_MSMTP"
+  warn ""
+  warn "Legacy SMTP config not found at $LEGACY_MSMTP"
+  warn "No changes were made. The migration stopped before installing anything."
+  warn ""
   exit 1
 fi
 
@@ -62,8 +91,11 @@ resolve_legacy_rclone_config() {
 
 LEGACY_RCLONE="$(resolve_legacy_rclone_config || true)"
 if [ -z "$LEGACY_RCLONE" ] || [ ! -f "$LEGACY_RCLONE" ]; then
-  printf "\nCould not locate the legacy rclone.conf file.\n"
-  printf "Expected it under the legacy service user's home directory or /root/.config/rclone/rclone.conf.\n\n"
+  warn ""
+  warn "Could not locate the legacy rclone.conf file."
+  warn "Expected it under the legacy service user's home directory or /root/.config/rclone/rclone.conf."
+  warn "No changes were made. The migration stopped before installing anything."
+  warn ""
   exit 1
 fi
 
@@ -134,20 +166,24 @@ cat > "$BUNDLE_DIR/manifest.json" <<EOF
 }
 EOF
 
-printf "\nLegacy state copied to %s\n" "$BACKUP_ROOT"
-printf "Installing the new SimpleSaferServer release...\n\n"
+log ""
+log "Legacy config: $LEGACY_CONFIG"
+log "Legacy SMTP config: $LEGACY_MSMTP"
+log "Legacy rclone config: $LEGACY_RCLONE"
+log "Legacy state copied to $BACKUP_ROOT"
+log "Installing the new SimpleSaferServer release..."
+log ""
 
 INSTALL_SCRIPT="$(mktemp)"
-if ! curl -fsSL "$NEW_INSTALL_URL" -o "$INSTALL_SCRIPT"; then
-  printf "Primary install URL failed, retrying with GitHub raw...\n"
-  curl -fsSL "$NEW_INSTALL_FALLBACK_URL" -o "$INSTALL_SCRIPT"
-fi
+curl -fsSL "$NEW_INSTALL_URL" -o "$INSTALL_SCRIPT"
 
 bash "$INSTALL_SCRIPT"
 rm -f "$INSTALL_SCRIPT"
 
 if [ ! -x "$IMPORTER_PATH" ]; then
-  printf "\nNew legacy importer was not found at %s\n\n" "$IMPORTER_PATH"
+  warn ""
+  warn "New legacy importer was not found at $IMPORTER_PATH"
+  warn ""
   exit 1
 fi
 
@@ -155,7 +191,9 @@ if [ ! -x "$IMPORTER_PYTHON" ]; then
   IMPORTER_PYTHON="python3"
 fi
 
-printf "\nImporting the legacy configuration into the new installation...\n\n"
+log ""
+log "Importing the legacy configuration into the new installation..."
+log ""
 printf '%s\n' "$ADMIN_PASSWORD" | "$IMPORTER_PYTHON" "$IMPORTER_PATH" \
   --bundle-dir "$BUNDLE_DIR" \
   --admin-username "$ADMIN_USERNAME" \
@@ -163,14 +201,16 @@ printf '%s\n' "$ADMIN_PASSWORD" | "$IMPORTER_PYTHON" "$IMPORTER_PATH" \
 
 unset ADMIN_PASSWORD
 
-printf "\nDisabling old timers and services...\n"
+log ""
+log "Disabling old timers and services..."
 systemctl disable --now backup_cloud.timer check_mount.timer check_hdsentinel_health.timer || true
 systemctl disable backup_cloud.service check_mount.service check_hdsentinel_health.service || true
 
-printf "\nMigration complete.\n"
-printf "Legacy backups: %s\n" "$BACKUP_ROOT"
-printf "New web UI service: simple_safer_server_web.service\n"
-printf "Access URLs:\n"
+log ""
+log "Migration complete."
+log "Legacy backups: $BACKUP_ROOT"
+log "New web UI service: simple_safer_server_web.service"
+log "Access URLs:"
 
 IP_LIST=$(hostname -I | tr ' ' '\n' | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -v '^127\.' || true)
 if [ -n "$IP_LIST" ]; then

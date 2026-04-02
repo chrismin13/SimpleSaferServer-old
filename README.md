@@ -17,6 +17,32 @@ The migration script will:
 - Import the legacy backup settings into the new system
 - Disable the old timers after the new setup succeeds
 
+### Quick Steps
+
+1. SSH into the legacy server.
+2. Run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/migrate.sh | sudo bash
+```
+
+3. Enter the new SimpleSaferServer admin username and password when prompted.
+4. Wait for the installer and importer to finish.
+5. Open the new web UI at `http://SERVER_IP:5000`.
+
+### Alternative Without Curl Pipe Bash
+
+```bash
+wget -O migrate.sh https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/migrate.sh
+sudo bash migrate.sh
+```
+
+### Notes
+
+- The script stores a backup of the legacy migration inputs under `/var/backups/SimpleSaferServer/`.
+- The old timers are only disabled after the new install and import succeed.
+- The migrated backup schedule keeps the same backup time, with the mount and health checks automatically scheduled 2 and 1 minutes before it.
+
 # Install
 ## Preparation
 ### Install dependencies
@@ -91,5 +117,12 @@ Find your Disk’s UUID and USB ID and keep them somewhere:
 
 Run:
 ```
-bash <(curl -s sss.chrismin13.com)
+bash <(curl -fsSL https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/install.sh)
+```
+
+Alternative:
+
+```bash
+wget -O install-old.sh https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/install.sh
+sudo bash install-old.sh
 ```
