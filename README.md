@@ -91,5 +91,5 @@ Find your Disk’s UUID and USB ID and keep them somewhere:
 
 Run:
 ```
-bash <(curl -fsSL https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/install.sh)
+tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/install.sh -o "$tmp" && sudo bash "$tmp"; rm -f "$tmp"
 ```
