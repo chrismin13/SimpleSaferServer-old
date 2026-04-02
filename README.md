@@ -17,7 +17,11 @@ The migration script will:
 - Import the legacy backup settings into the new system
 - Disable the old timers after the new setup succeeds
 
-If the machine is still on Debian 10 (Buster), `apt-get update` may fail because the normal Debian mirrors no longer serve it. For temporary testing on an old machine, switch APT to the Debian archive first:
+If the machine is still on Debian 10 (Buster), `apt-get update` may fail because the normal Debian mirrors no longer serve it.
+
+**Warning:** this is only a temporary workaround for migrating or testing an old Debian 10 machine.
+
+For temporary testing on an old machine, switch APT to the Debian archive first:
 
 ```bash
 sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak
