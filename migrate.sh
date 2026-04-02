@@ -105,11 +105,11 @@ prompt_admin_username() {
   while true; do
     read -r -p "Enter the new SimpleSaferServer admin username [${default_username}]: " input </dev/tty
     input="${input:-$default_username}"
-    if [[ "$input" =~ ^[a-zA-Z0-9_-]{3,32}$ ]]; then
+    if [[ "$input" =~ ^[a-zA-Z0-9_-]+$ ]]; then
       printf '%s\n' "$input"
       return 0
     fi
-    printf "Username must be 3-32 characters and contain only letters, numbers, underscores, and hyphens.\n" >&2
+    printf "Username may only contain letters, numbers, underscores, and hyphens.\n" >&2
   done
 }
 
