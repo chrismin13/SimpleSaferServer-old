@@ -1,6 +1,22 @@
 # SimpleSaferServer
 Basic scripts designed to run on Debian-based (Raspberry Pi or Ubuntu Server) machines to back up data, monitor hard drive health and more.
 
+## Migrate To The New Version
+
+To migrate an existing legacy installation to the new SimpleSaferServer implementation, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/main/migrate.sh | sudo bash
+```
+
+The migration script will:
+
+- Back up the legacy config, SMTP config, and rclone config
+- Install the new SimpleSaferServer release
+- Prompt for the new admin username and password
+- Import the legacy backup settings into the new system
+- Disable the old timers after the new setup succeeds
+
 # Install
 ## Preparation
 ### Install dependencies
