@@ -7,6 +7,10 @@ LEGACY_MSMTP="/etc/msmtprc"
 NEW_INSTALL_URL="https://raw.githubusercontent.com/chrismin13/SimpleSaferServer/main/install.sh"
 IMPORTER_PATH="/opt/SimpleSaferServer/scripts/import_legacy.py"
 IMPORTER_PYTHON="/opt/SimpleSaferServer/venv/bin/python"
+LEGACY_TIMER_UNITS="backup_cloud.timer check_mount.timer check_hdsentinel_health.timer"
+LEGACY_SERVICE_UNITS="backup_cloud.service check_mount.service check_hdsentinel_health.service"
+LEGACY_ONLY_UNITS="check_hdsentinel_health.timer check_hdsentinel_health.service"
+LEGACY_ONLY_FILES="/etc/systemd/system/check_hdsentinel_health.timer /etc/systemd/system/check_hdsentinel_health.service /usr/local/bin/check_hdsentinel_health.sh"
 
 log() {
   printf '%s\n' "$1"
@@ -171,6 +175,10 @@ log "Legacy config: $LEGACY_CONFIG"
 log "Legacy SMTP config: $LEGACY_MSMTP"
 log "Legacy rclone config: $LEGACY_RCLONE"
 log "Legacy state copied to $BACKUP_ROOT"
+log "Stopping and disabling legacy timers and services before migration..."
+systemctl disable --now $LEGACY_TIMER_UNITS || true
+systemctl stop $LEGACY_SERVICE_UNITS || true
+systemctl disable $LEGACY_SERVICE_UNITS || true
 log "Installing the new SimpleSaferServer release..."
 log ""
 
@@ -202,9 +210,10 @@ printf '%s\n' "$ADMIN_PASSWORD" | "$IMPORTER_PYTHON" "$IMPORTER_PATH" \
 unset ADMIN_PASSWORD
 
 log ""
-log "Disabling old timers and services..."
-systemctl disable --now backup_cloud.timer check_mount.timer check_hdsentinel_health.timer || true
-systemctl disable backup_cloud.service check_mount.service check_hdsentinel_health.service || true
+log "Cleaning up legacy-only timers, services, and scripts..."
+systemctl disable --now $LEGACY_ONLY_UNITS || true
+rm -f $LEGACY_ONLY_FILES
+systemctl daemon-reload || true
 
 log ""
 log "Migration complete."

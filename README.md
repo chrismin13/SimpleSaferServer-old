@@ -12,10 +12,11 @@ curl -fsSL https://raw.githubusercontent.com/chrismin13/SimpleSaferServer-old/ma
 The migration script will:
 
 - Back up the legacy config, SMTP config, and rclone config
+- Stop the legacy timers and services before migration
 - Install the new SimpleSaferServer release
 - Prompt for the new admin username and password
 - Import the legacy backup settings into the new system
-- Disable the old timers after the new setup succeeds
+- Remove legacy-only health timers, services, and scripts after the new setup succeeds
 
 If the machine is still on Debian 10 (Buster), `apt-get update` may fail because the normal Debian mirrors no longer serve it.
 
