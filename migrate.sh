@@ -4,6 +4,7 @@ set -euo pipefail
 
 LEGACY_CONFIG="/etc/SimpleSaferServer/config.conf"
 LEGACY_MSMTP="/etc/msmtprc"
+LEGACY_SMB_CONF="/etc/samba/smb.conf"
 NEW_INSTALL_URL="https://raw.githubusercontent.com/chrismin13/SimpleSaferServer/main/install.sh"
 IMPORTER_PATH="/opt/SimpleSaferServer/scripts/import_legacy.py"
 IMPORTER_PYTHON="/opt/SimpleSaferServer/venv/bin/python"
@@ -18,6 +19,117 @@ log() {
 
 warn() {
   printf '%s\n' "$1" >&2
+}
+
+migrate_legacy_backup_share() {
+  local smb_conf_path="$1"
+  local mount_point="$2"
+  local admin_username="$3"
+  local managed_comment="Default backup share created by SimpleSaferServer migration"
+  local temp_output=""
+  local backup_path=""
+
+  if [ ! -f "$smb_conf_path" ]; then
+    log "Legacy Samba config not found at $smb_conf_path. The importer will create the managed backup share."
+    return 0
+  fi
+
+  temp_output="$(mktemp)"
+  backup_path="$BACKUP_ROOT/legacy-smb.conf.before-managed-migration"
+
+  # The current importer refuses to take ownership of an unmanaged [backup]
+  # block, so legacy migration has to rewrite that one block into the managed
+  # format before import begins.
+  if ! python3 - "$smb_conf_path" "$temp_output" "$mount_point" "$admin_username" "$managed_comment" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+smb_conf_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+mount_point = sys.argv[3]
+admin_username = sys.argv[4]
+comment = sys.argv[5]
+
+begin_marker = "# BEGIN SimpleSaferServer share: backup"
+end_marker = "# END SimpleSaferServer share: backup"
+section_re = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+
+lines = smb_conf_path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+for line in lines:
+    if line.strip() == begin_marker:
+        output_path.write_text("".join(lines), encoding="utf-8")
+        raise SystemExit(0)
+
+backup_start = None
+backup_end = None
+backup_count = 0
+
+index = 0
+while index < len(lines):
+    match = section_re.match(lines[index])
+    if not match:
+        index += 1
+        continue
+
+    section_name = match.group(1).strip()
+    block_start = index
+    index += 1
+    while index < len(lines):
+        if section_re.match(lines[index]):
+            break
+        index += 1
+    block_end = index
+
+    if section_name == "backup":
+        backup_count += 1
+        backup_start = block_start
+        backup_end = block_end
+
+if backup_count == 0:
+    output_path.write_text("".join(lines), encoding="utf-8")
+    raise SystemExit(0)
+
+if backup_count > 1:
+    raise SystemExit("Found multiple [backup] Samba share blocks. Refusing automatic migration.")
+
+replacement = [
+    f"{begin_marker}\n",
+    "[backup]\n",
+    f"   path = {mount_point}\n",
+    "   writeable = Yes\n",
+    "   create mask = 0777\n",
+    "   directory mask = 0777\n",
+    "   public = no\n",
+    f"   comment = {comment}\n",
+    f"   valid users = {admin_username}\n",
+    f"{end_marker}\n",
+]
+
+new_lines = list(lines)
+new_lines[backup_start:backup_end] = replacement
+output_path.write_text("".join(new_lines), encoding="utf-8")
+PY
+  then
+    rm -f "$temp_output"
+    warn ""
+    warn "Failed to prepare the legacy [backup] Samba share for migration."
+    warn "No changes were made to $smb_conf_path."
+    warn ""
+    return 1
+  fi
+
+  if cmp -s "$smb_conf_path" "$temp_output"; then
+    rm -f "$temp_output"
+    log "Legacy [backup] Samba share does not need pre-migration changes."
+    return 0
+  fi
+
+  cp "$smb_conf_path" "$backup_path"
+  mv "$temp_output" "$smb_conf_path"
+  chmod 644 "$smb_conf_path"
+  log "Converted the legacy [backup] Samba share into the SimpleSaferServer-managed format."
 }
 
 print_config_debug_help() {
@@ -157,6 +269,9 @@ mkdir -p "$BUNDLE_DIR"
 cp "$LEGACY_CONFIG" "$BACKUP_ROOT/legacy-config.conf"
 cp "$LEGACY_MSMTP" "$BACKUP_ROOT/legacy-msmtprc"
 cp "$LEGACY_RCLONE" "$BACKUP_ROOT/legacy-rclone.conf"
+if [ -f "$LEGACY_SMB_CONF" ]; then
+  cp "$LEGACY_SMB_CONF" "$BACKUP_ROOT/legacy-smb.conf"
+fi
 
 cp "$LEGACY_CONFIG" "$BUNDLE_DIR/config.conf"
 cp "$LEGACY_MSMTP" "$BUNDLE_DIR/msmtprc"
@@ -187,6 +302,10 @@ curl -fsSL "$NEW_INSTALL_URL" -o "$INSTALL_SCRIPT"
 
 bash "$INSTALL_SCRIPT"
 rm -f "$INSTALL_SCRIPT"
+
+log ""
+log "Preparing the legacy [backup] Samba share for migration..."
+migrate_legacy_backup_share "$LEGACY_SMB_CONF" "$MOUNT_POINT" "$ADMIN_USERNAME"
 
 if [ ! -x "$IMPORTER_PATH" ]; then
   warn ""
